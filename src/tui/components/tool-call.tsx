@@ -2,8 +2,9 @@ import React, { memo, useState, useEffect } from "react";
 import { Box, Text } from "ink";
 import type { ToolUIPart, DynamicToolUIPart } from "ai";
 import { getToolName } from "ai";
+import type { TUIAgentUITools } from "../types";
 
-type ToolPart = ToolUIPart | DynamicToolUIPart;
+type ToolPart = ToolUIPart<TUIAgentUITools> | DynamicToolUIPart;
 
 type ToolCallProps = {
   part: ToolPart;

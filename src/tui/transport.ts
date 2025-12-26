@@ -1,19 +1,15 @@
-import {
-  type ChatTransport,
-  ToolLoopAgent,
-  type UIMessage,
-  convertToModelMessages,
-} from "ai";
+import { type ChatTransport, convertToModelMessages } from "ai";
+import type { TUIAgent, TUIAgentCallOptions, TUIAgentUIMessage } from "./types";
 
 export type AgentTransportOptions = {
-  agent: ToolLoopAgent<any, any, any>;
-  agentOptions?: Record<string, unknown>;
+  agent: TUIAgent;
+  agentOptions: TUIAgentCallOptions;
 };
 
 export function createAgentTransport({
   agent,
   agentOptions,
-}: AgentTransportOptions): ChatTransport<UIMessage> {
+}: AgentTransportOptions): ChatTransport<TUIAgentUIMessage> {
   return {
     sendMessages: async ({ messages, abortSignal }) => {
       const modelMessages = await convertToModelMessages(messages);

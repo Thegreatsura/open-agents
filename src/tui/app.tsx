@@ -1,17 +1,22 @@
 import React, { useEffect, useState, useCallback, useMemo, memo } from "react";
 import { Box, Text, useApp, useInput } from "ink";
-import type { ToolLoopAgent, UIMessage } from "ai";
 import { isToolUIPart, getToolName } from "ai";
 import { useChat } from "@ai-sdk/react";
 import { createAgentTransport } from "./transport.js";
 import { ToolCall } from "./components/tool-call.js";
 import { StatusBar } from "./components/status-bar.js";
 import { InputBox } from "./components/input-box.js";
-import type { TUIOptions, AutoAcceptMode } from "./types.js";
+import type {
+  TUIOptions,
+  AutoAcceptMode,
+  TUIAgent,
+  TUIAgentUIMessagePart,
+  TUIAgentUIMessage,
+} from "./types.js";
 
 type AppProps = {
-  agent: ToolLoopAgent<any, any, any>;
-  options?: TUIOptions;
+  agent: TUIAgent;
+  options: TUIOptions;
 };
 
 // Memoized text part component
@@ -36,12 +41,12 @@ const ReasoningPart = memo(function ReasoningPart({ text }: { text: string }) {
 });
 
 // Tool wrapper - not memoized to allow spinner animations
-function ToolPartWrapper({ part }: { part: UIMessage["parts"][number] }) {
+function ToolPartWrapper({ part }: { part: TUIAgentUIMessagePart }) {
   if (!isToolUIPart(part)) return null;
   return <ToolCall part={part} />;
 }
 
-function renderPart(part: UIMessage["parts"][number], key: string) {
+function renderPart(part: TUIAgentUIMessagePart, key: string) {
   // Handle tool parts (both static and dynamic)
   if (isToolUIPart(part)) {
     return <ToolPartWrapper key={key} part={part} />;
@@ -62,7 +67,11 @@ function renderPart(part: UIMessage["parts"][number], key: string) {
 }
 
 // Memoized user message component
-const UserMessage = memo(function UserMessage({ message }: { message: UIMessage }) {
+const UserMessage = memo(function UserMessage({
+  message,
+}: {
+  message: TUIAgentUIMessage;
+}) {
   const text = message.parts
     .filter((p): p is { type: "text"; text: string } => p.type === "text")
     .map((p) => p.text)
@@ -81,18 +90,26 @@ const UserMessage = memo(function UserMessage({ message }: { message: UIMessage 
 });
 
 // Memoized assistant message component
-const AssistantMessage = memo(function AssistantMessage({ message }: { message: UIMessage }) {
+const AssistantMessage = memo(function AssistantMessage({
+  message,
+}: {
+  message: TUIAgentUIMessage;
+}) {
   return (
     <Box flexDirection="column">
       {message.parts.map((part, index) =>
-        renderPart(part, `${message.id}-${index}`)
+        renderPart(part, `${message.id}-${index}`),
       )}
     </Box>
   );
 });
 
 // Memoized message renderer
-const Message = memo(function Message({ message }: { message: UIMessage }) {
+const Message = memo(function Message({
+  message,
+}: {
+  message: TUIAgentUIMessage;
+}) {
   if (message.role === "user") {
     return <UserMessage message={message} />;
   }
@@ -107,7 +124,7 @@ const AUTO_ACCEPT_MODES: AutoAcceptMode[] = ["off", "edits", "all"];
 // Isolated timer component to prevent re-renders of entire app
 const Timer = memo(function Timer({
   isStreaming,
-  startTime
+  startTime,
 }: {
   isStreaming: boolean;
   startTime: number | null;
@@ -130,7 +147,11 @@ const Timer = memo(function Timer({
 });
 
 // Memoized messages list
-const MessagesList = memo(function MessagesList({ messages }: { messages: UIMessage[] }) {
+const MessagesList = memo(function MessagesList({
+  messages,
+}: {
+  messages: TUIAgentUIMessage[];
+}) {
   return (
     <Box flexDirection="column">
       {messages.map((message) => (
@@ -141,7 +162,11 @@ const MessagesList = memo(function MessagesList({ messages }: { messages: UIMess
 });
 
 // Memoized error display
-const ErrorDisplay = memo(function ErrorDisplay({ error }: { error: Error | undefined }) {
+const ErrorDisplay = memo(function ErrorDisplay({
+  error,
+}: {
+  error: Error | undefined;
+}) {
   if (!error) return null;
   return (
     <Box marginTop={1}>
@@ -151,14 +176,18 @@ const ErrorDisplay = memo(function ErrorDisplay({ error }: { error: Error | unde
 });
 
 // Hook to get status text - memoized computation
-function useStatusText(messages: UIMessage[]): string {
+function useStatusText(messages: TUIAgentUIMessage[]): string {
   return useMemo(() => {
     const lastMessage = messages[messages.length - 1];
     if (lastMessage?.role === "assistant") {
       // Iterate from end to find latest running tool
       for (let i = lastMessage.parts.length - 1; i >= 0; i--) {
         const p = lastMessage.parts[i];
-        if (p && isToolUIPart(p) && (p.state === "input-available" || p.state === "input-streaming")) {
+        if (
+          p &&
+          isToolUIPart(p) &&
+          (p.state === "input-available" || p.state === "input-streaming")
+        ) {
           return `${getToolName(p)}...`;
         }
       }
@@ -170,9 +199,9 @@ function useStatusText(messages: UIMessage[]): string {
 // Isolated streaming status bar with its own timer
 const StreamingStatusBar = memo(function StreamingStatusBar({
   messages,
-  startTime
+  startTime,
 }: {
-  messages: UIMessage[];
+  messages: TUIAgentUIMessage[];
   startTime: number | null;
 }) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -208,14 +237,15 @@ export function App({ agent, options }: AppProps) {
     () =>
       createAgentTransport({
         agent,
-        agentOptions: options?.agentOptions,
+        agentOptions: options.agentOptions,
       }),
-    [agent, options?.agentOptions]
+    [agent, options?.agentOptions],
   );
 
-  const { messages, sendMessage, status, stop, error } = useChat({
-    transport,
-  });
+  const { messages, sendMessage, status, stop, error } =
+    useChat<TUIAgentUIMessage>({
+      transport,
+    });
 
   const isStreaming = status === "streaming" || status === "submitted";
 
@@ -249,7 +279,7 @@ export function App({ agent, options }: AppProps) {
         sendMessage({ text: prompt });
       }
     },
-    [isStreaming, sendMessage]
+    [isStreaming, sendMessage],
   );
 
   const toggleAutoAccept = useCallback(() => {

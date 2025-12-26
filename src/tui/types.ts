@@ -1,3 +1,18 @@
+import type { InferAgentUIMessage, InferUITools, ToolLoopAgent } from "ai";
+import type { DeepAgent } from "../agent/deep-agent";
+
+// update here!
+export type TUIAgent = DeepAgent;
+// export type TUIAgent = ToolLoopAgent<any, any, any>;
+export type TUIAgentCallOptions = Parameters<TUIAgent["generate"]>["0"]["options"];
+
+// all derived
+export type TUIAgentUIMessage = InferAgentUIMessage<TUIAgent>;
+export type TUIAgentUIMessagePart = TUIAgentUIMessage["parts"][number];
+export type TUIAgentTools = TUIAgent["tools"];
+export type TUIAgentUITools = InferUITools<TUIAgentTools>;
+
+/* --- */
 export type AutoAcceptMode = "off" | "edits" | "all";
 
 export type TUIOptions = {
@@ -5,6 +20,6 @@ export type TUIOptions = {
   initialPrompt?: string;
   /** Working directory for the agent */
   workingDirectory?: string;
-  /** Custom agent options passed to stream() */
-  agentOptions?: Record<string, unknown>;
+  /** Custom agent options passed  */
+  agentOptions: TUIAgentCallOptions;
 };

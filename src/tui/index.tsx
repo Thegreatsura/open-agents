@@ -2,7 +2,7 @@ import React from "react";
 import { render } from "ink";
 import type { ToolLoopAgent } from "ai";
 import { App } from "./app.js";
-import type { TUIOptions } from "./types.js";
+import type { TUIAgent, TUIOptions } from "./types.js";
 
 export type { TUIOptions, AutoAcceptMode } from "./types.js";
 
@@ -25,7 +25,7 @@ export type { TUIOptions, AutoAcceptMode } from "./types.js";
  * ```
  */
 export async function createTUI(
-  agent: ToolLoopAgent<any, any, any>,
+  agent: TUIAgent,
   options?: TUIOptions
 ): Promise<void> {
   const { waitUntilExit } = render(
@@ -40,7 +40,7 @@ export async function createTUI(
  * Useful for programmatic control.
  */
 export function renderTUI(
-  agent: ToolLoopAgent<any, any, any>,
+  agent: TUIAgent,
   options?: TUIOptions
 ) {
   return render(<App agent={agent} options={options} />);

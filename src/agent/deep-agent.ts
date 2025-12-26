@@ -1,5 +1,4 @@
 import {
-  type InferAgentUIMessage,
   ToolLoopAgent,
   gateway,
   stepCountIs,
@@ -112,11 +111,3 @@ export function extractTodosFromStep(
 }
 
 export type DeepAgent = typeof deepAgent;
-
-export type DeepAgentUIMessage = InferAgentUIMessage<DeepAgent>;
-
-export type DeepAgentTools = typeof deepAgent.tools;
-
-export type DeepAgentUITools = InferUITools<DeepAgentTools>;
-
-export type DeepAgentUIMessagePart = DeepAgentUIMessage["parts"][number];
