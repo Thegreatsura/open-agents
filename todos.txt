@@ -1,0 +1,2 @@
+- [ ] add reason to tool approval response
+- [ ] move to use context (remove prop drilling)

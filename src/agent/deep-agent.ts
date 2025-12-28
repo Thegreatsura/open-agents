@@ -25,6 +25,7 @@ import type { TodoItem, ScratchpadEntry } from "./types";
 import { todoItemSchema } from "./types";
 import { devToolsMiddleware } from "@ai-sdk/devtools";
 import { addCacheControl } from "./utils";
+import { anthropic } from "@ai-sdk/anthropic";
 
 const callOptionsSchema = z.object({
   workingDirectory: z.string(),
@@ -46,14 +47,15 @@ const callOptionsSchema = z.object({
 
 export type DeepAgentCallOptions = z.infer<typeof callOptionsSchema>;
 
-const model = gateway("anthropic/claude-haiku-4.5");
+// const model = gateway("anthropic/claude-haiku-4.5");
+const model = anthropic("claude-haiku-4-5");
 
 export const deepAgent = new ToolLoopAgent({
-  // model: wrapLanguageModel({
-  //   middleware: devToolsMiddleware(),
-  //   model,
-  // }),
-  model, // non dev-tools model
+  model: wrapLanguageModel({
+    middleware: devToolsMiddleware(),
+    model,
+  }),
+  // model, // non dev-tools model
   instructions: buildSystemPrompt({}),
   tools: addCacheControl({
     tools: {

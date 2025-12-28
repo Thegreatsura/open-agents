@@ -17,7 +17,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@ai-sdk/devtools": "^0.0.1",
+    "@ai-sdk/devtools": "^0.0.2",
     "@types/bun": "latest",
     "@types/node": "^22"
   },
@@ -25,6 +25,7 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.1",
     "@ai-sdk/react": "^3.0.3",
     "@types/react": "^19.2.7",
     "ai": "^6.0.3",

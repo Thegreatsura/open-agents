@@ -12,7 +12,11 @@ export function createAgentTransport({
 }: AgentTransportOptions): ChatTransport<TUIAgentUIMessage> {
   return {
     sendMessages: async ({ messages, abortSignal }) => {
-      const modelMessages = await convertToModelMessages(messages);
+      // Pass the agent's tools so convertToModelMessages can properly handle
+      // tool approval responses for locally-executed tools
+      const modelMessages = await convertToModelMessages(messages, {
+        tools: agent.tools,
+      });
 
       const result = await agent.stream({
         messages: modelMessages,
