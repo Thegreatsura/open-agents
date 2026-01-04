@@ -3,6 +3,7 @@ import { Box, Text, useApp, useInput } from "ink";
 import {
   isToolUIPart,
   getToolName,
+  type FileUIPart,
 } from "ai";
 import { useChat } from "@ai-sdk/react";
 import { renderMarkdown } from "./lib/markdown.js";
@@ -135,14 +136,32 @@ const UserMessage = memo(function UserMessage({
     .map((p) => p.text)
     .join("");
 
+  const imageCount = message.parts.filter(
+    (p) => p.type === "file" && (p as FileUIPart).mediaType?.startsWith("image/")
+  ).length;
+
   return (
-    <Box marginTop={1} marginBottom={1}>
-      <Text color="magenta" bold>
-        &gt;{" "}
-      </Text>
-      <Text color="white" bold>
-        {text}
-      </Text>
+    <Box flexDirection="column" marginTop={1} marginBottom={1}>
+      {imageCount > 0 && (
+        <Box>
+          <Text color="magenta" bold>
+            &gt;{" "}
+          </Text>
+          <Text color="blue">
+            {imageCount === 1 ? "[1 image attached]" : `[${imageCount} images attached]`}
+          </Text>
+        </Box>
+      )}
+      {text && (
+        <Box>
+          <Text color="magenta" bold>
+            &gt;{" "}
+          </Text>
+          <Text color="white" bold>
+            {text}
+          </Text>
+        </Box>
+      )}
     </Box>
   );
 });
@@ -401,10 +420,10 @@ function AppContent({ options }: AppProps) {
   }, []);
 
   const handleSubmit = useCallback(
-    (prompt: string) => {
+    (prompt: string, files?: FileUIPart[]) => {
       if (!isStreaming) {
         setStartTime(Date.now());
-        sendMessage({ text: prompt });
+        sendMessage({ text: prompt, files });
       }
     },
     [isStreaming, sendMessage],

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, memo, useMemo } from "react";
 import { Box, Text, useInput } from "ink";
+import type { FileUIPart } from "ai";
 import { TextInput } from "./text-input.js";
 import { Suggestions, type Suggestion } from "./suggestions.js";
 import { getFileSuggestions, extractMention } from "../lib/file-suggestions.js";
@@ -12,10 +13,21 @@ import {
   isPasteTokenChar,
   type PasteBlock,
 } from "../lib/paste-blocks.js";
+import {
+  getClipboardImage,
+  imageToDataUrl,
+  isImagePath,
+  loadImageFromPath,
+} from "../lib/image-clipboard.js";
+import {
+  formatImagePlaceholder,
+  imageBlockToFilePart,
+  type ImageBlock,
+} from "../lib/image-blocks.js";
 import type { AutoAcceptMode } from "../types.js";
 
 type InputBoxProps = {
-  onSubmit: (value: string) => void;
+  onSubmit: (value: string, files?: FileUIPart[]) => void;
   autoAcceptMode: AutoAcceptMode;
   onToggleAutoAccept: () => void;
   disabled?: boolean;
@@ -107,19 +119,69 @@ export const InputBox = memo(function InputBox({
     partialPath: string;
   } | null>(null);
   const [pasteBlocks, setPasteBlocks] = useState<PasteBlock[]>([]);
+  const [imageBlocks, setImageBlocks] = useState<ImageBlock[]>([]);
+  const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nextPasteIdRef = useRef(1);
+  const nextImageIdRef = useRef(1);
+
+  const handleImagePaste = useCallback(async () => {
+    const clipboardImage = await getClipboardImage();
+    if (clipboardImage) {
+      const id = nextImageIdRef.current;
+      nextImageIdRef.current += 1;
+      const dataUrl = imageToDataUrl(clipboardImage);
+      setImageBlocks((prev) => [
+        ...prev,
+        { id, dataUrl, mediaType: clipboardImage.mediaType },
+      ]);
+      setSelectedImageIndex(null);
+    }
+  }, []);
+
+  const handleRemoveImage = useCallback((index: number) => {
+    setImageBlocks((prev) => prev.filter((_, i) => i !== index));
+    setSelectedImageIndex(null);
+  }, []);
 
   useInput((input, key) => {
     // Shift+Tab to cycle auto-accept modes
     if (key.shift && key.tab) {
       onToggleAutoAccept();
     }
-    // Escape to close suggestions
-    if (key.escape && suggestions.length > 0) {
-      setSuggestions([]);
-      setMentionInfo(null);
+    // Escape to close suggestions or deselect image
+    if (key.escape) {
+      if (selectedImageIndex !== null) {
+        setSelectedImageIndex(null);
+      } else if (suggestions.length > 0) {
+        setSuggestions([]);
+        setMentionInfo(null);
+      }
+    }
+    // Ctrl+V to paste image
+    if (key.ctrl && input === "v" && !disabled) {
+      handleImagePaste();
+    }
+    // Up arrow to select image when at start of input
+    if (key.upArrow && imageBlocks.length > 0 && cursorPosition === 0 && suggestions.length === 0) {
+      if (selectedImageIndex === null) {
+        setSelectedImageIndex(imageBlocks.length - 1);
+      } else if (selectedImageIndex > 0) {
+        setSelectedImageIndex(selectedImageIndex - 1);
+      }
+    }
+    // Down arrow to deselect image
+    if (key.downArrow && selectedImageIndex !== null) {
+      if (selectedImageIndex < imageBlocks.length - 1) {
+        setSelectedImageIndex(selectedImageIndex + 1);
+      } else {
+        setSelectedImageIndex(null);
+      }
+    }
+    // Backspace to remove selected image
+    if ((key.backspace || key.delete) && selectedImageIndex !== null) {
+      handleRemoveImage(selectedImageIndex);
     }
   });
 
@@ -171,8 +233,29 @@ export const InputBox = memo(function InputBox({
     setCursorPosition(position);
   }, []);
 
+  const addImageFromPath = useCallback(async (filePath: string) => {
+    const image = await loadImageFromPath(filePath);
+    if (image) {
+      const id = nextImageIdRef.current;
+      nextImageIdRef.current += 1;
+      const dataUrl = imageToDataUrl(image);
+      setImageBlocks((prev) => [
+        ...prev,
+        { id, dataUrl, mediaType: image.mediaType },
+      ]);
+      return true;
+    }
+    return false;
+  }, []);
+
   const handlePaste = useCallback(
     (text: string) => {
+      const trimmedText = text.trim();
+      if (isImagePath(trimmedText)) {
+        addImageFromPath(trimmedText);
+        return true;
+      }
+
       const lineCount = countLines(text);
       if (lineCount <= 1 || lineCount < pasteCollapseLineThreshold) {
         return false;
@@ -189,7 +272,7 @@ export const InputBox = memo(function InputBox({
       setPasteBlocks((prev) => [...prev, { id, token, text, lineCount }]);
       return true;
     },
-    [cursorPosition, pasteCollapseLineThreshold, updateValue, value]
+    [cursorPosition, pasteCollapseLineThreshold, updateValue, value, addImageFromPath]
   );
 
   const renderPasteToken = useCallback(
@@ -291,20 +374,49 @@ export const InputBox = memo(function InputBox({
     (submitValue: string) => {
       const expandedValue = expandPasteTokens(submitValue, pasteBlocksByToken);
       const trimmedValue = expandedValue.trim();
-      if (trimmedValue && !disabled) {
-        onSubmit(trimmedValue);
+      const hasContent = trimmedValue || imageBlocks.length > 0;
+      if (hasContent && !disabled) {
+        const files = imageBlocks.length > 0
+          ? imageBlocks.map(imageBlockToFilePart)
+          : undefined;
+        onSubmit(trimmedValue, files);
         updateValue("");
         setCursorPosition(0);
         setSuggestions([]);
         setMentionInfo(null);
+        setImageBlocks([]);
+        setSelectedImageIndex(null);
+        nextImageIdRef.current = 1;
       }
     },
-    [disabled, onSubmit, pasteBlocksByToken, updateValue]
+    [disabled, onSubmit, pasteBlocksByToken, updateValue, imageBlocks]
   );
 
   return (
     <Box flexDirection="column" marginTop={1}>
-      {/* Input line with top/bottom borders only */}
+      {/* Image attachments */}
+      {imageBlocks.length > 0 && (
+        <Box marginBottom={0} gap={1}>
+          {imageBlocks.map((block, index) => (
+            <Box key={block.id}>
+              <Text
+                color={selectedImageIndex === index ? "cyan" : "blue"}
+                inverse={selectedImageIndex === index}
+              >
+                {formatImagePlaceholder(block.id)}
+              </Text>
+              {selectedImageIndex === index && (
+                <Text color="gray"> (backspace remove · ↓ cancel)</Text>
+              )}
+            </Box>
+          ))}
+          {selectedImageIndex === null && (
+            <Text color="gray">(↑ to select)</Text>
+          )}
+        </Box>
+      )}
+
+      {/* Input line */}
       <Box
         borderStyle="single"
         borderTop

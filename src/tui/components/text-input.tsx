@@ -142,7 +142,7 @@ export function TextInput({
   );
 
   const flushPasteBuffer = useCallback(() => {
-    const buffered = pasteBufferRef.current;
+    let buffered = pasteBufferRef.current;
     if (!buffered) return;
 
     pasteBufferRef.current = "";
@@ -150,6 +150,12 @@ export function TextInput({
       clearTimeout(pasteTimerRef.current);
       pasteTimerRef.current = null;
     }
+
+    // Strip bracketed paste escape sequences (used by Ghostty, iTerm2, etc.)
+    // Start: \x1b[200~ End: \x1b[201~
+    buffered = buffered.replace(/\x1b\[200~/g, "").replace(/\x1b\[201~/g, "");
+
+    if (!buffered) return;
 
     if (onPaste) {
       const handled = onPaste(buffered);
@@ -246,7 +252,7 @@ export function TextInput({
         }
         pasteTimerRef.current = setTimeout(() => {
           flushPasteBuffer();
-        }, 10);
+        }, 50);
         return;
       }
 
