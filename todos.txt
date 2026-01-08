@@ -30,6 +30,7 @@
 - [ ] explore a tool registry that uses provider defined tools when available...
 - [ ] explore tool registry (server-side) that switches to provider-defined tools when available
 - [ ] add slash commands
+- [ ] add ability to alt arrow between input box
 
 ---
 sandbox related:
@@ -37,6 +38,7 @@ sandbox related:
 - [ ] add lifecycle hooks for sandbox interface (after setup / before stop)
 - [ ] add timeout related info to interface
 - [ ] add command to ssh into sandbox!
+- [ ] update suggestions (tui) to show files in sandbox
 
 ---
 
