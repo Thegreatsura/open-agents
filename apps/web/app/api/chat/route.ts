@@ -15,13 +15,16 @@ import {
   getChatMessages,
   getSessionById,
   updateChat,
+  updateChatActiveStreamId,
   updateSession,
   upsertChatMessage,
 } from "@/lib/db/sessions";
 import { getUserGitHubToken } from "@/lib/github/user-token";
 import { DEFAULT_MODEL_ID } from "@/lib/models";
+import { resumableStreamContext } from "@/lib/resumable-stream-context";
 import { kickSandboxLifecycleWorkflow } from "@/lib/sandbox/lifecycle-kick";
 import { buildActiveLifecycleUpdate } from "@/lib/sandbox/lifecycle";
+import { onStopSignal } from "@/lib/stop-signal";
 import { isSandboxActive } from "@/lib/sandbox/utils";
 import { getServerSession } from "@/lib/session/get-server-session";
 
@@ -167,6 +170,17 @@ export async function POST(req: Request) {
     model = gateway(DEFAULT_MODEL_ID as GatewayModelId);
   }
 
+  // Create abort controller with shared Redis pub/sub for instant stop
+  const controller = new AbortController();
+  const unsubscribeStop = await onStopSignal(chatId, () => {
+    controller.abort();
+  });
+
+  const finalizeStream = async () => {
+    unsubscribeStop();
+    await updateChatActiveStreamId(chatId, null);
+  };
+
   const result = await webAgent.stream({
     messages: modelMessages,
     options: {
@@ -180,10 +194,13 @@ export async function POST(req: Request) {
       },
       ...(skills.length > 0 && { skills }),
     },
-    abortSignal: req.signal,
+    abortSignal: controller.signal,
   });
 
-  result.consumeStream();
+  void result.consumeStream().then(
+    () => finalizeStream(),
+    () => finalizeStream(),
+  );
 
   // Track last step usage for message metadata
   let lastStepUsage: LanguageModelUsage | undefined;
@@ -205,7 +222,17 @@ export async function POST(req: Request) {
       }
       return undefined;
     },
+    async consumeSseStream({ stream }) {
+      const streamId = nanoid();
+      await resumableStreamContext.createNewResumableStream(
+        streamId,
+        () => stream,
+      );
+      await updateChatActiveStreamId(chatId, streamId);
+    },
     onFinish: async ({ responseMessage }) => {
+      await finalizeStream();
+
       if (chatId) {
         const activityAt = new Date();
 
