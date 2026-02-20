@@ -17,13 +17,16 @@ export function BashRenderer({
   const input = part.input;
   const command = String(input?.command ?? "");
   const cwd = input?.cwd;
+  const isDetached = input?.detached === true;
 
   const output = part.state === "output-available" ? part.output : undefined;
   const exitCode = output?.exitCode;
   const stdout = output?.stdout;
   const stderr = output?.stderr;
   const hasOutput = stdout || stderr;
-  const isError = exitCode !== undefined && exitCode !== 0;
+  const toolFailed = output?.success === false;
+  const isError =
+    toolFailed || (typeof exitCode === "number" && exitCode !== 0);
 
   const combinedOutput = [stdout, stderr].filter(Boolean).join("\n").trim();
   const allLines = combinedOutput.split("\n");
@@ -31,7 +34,8 @@ export function BashRenderer({
   const hasMoreLines = allLines.length > 3;
 
   // Determine if we have content worth expanding
-  const hasExpandableContent = command.length > 60 || hasMoreLines || cwd;
+  const hasExpandableContent =
+    command.length > 60 || hasMoreLines || cwd || isDetached;
 
   const dotColor = state.denied
     ? "bg-red-500"
@@ -95,6 +99,11 @@ export function BashRenderer({
             : command || "..."}
         </code>
         <span className="text-muted-foreground">)</span>
+        {isDetached && (
+          <span className="rounded bg-blue-500/15 px-1.5 py-0.5 text-xs font-medium text-blue-500">
+            detached
+          </span>
+        )}
       </div>
 
       {state.approvalRequested && state.isActiveApproval && (
@@ -127,7 +136,9 @@ export function BashRenderer({
           <div className="mt-2 pl-5">
             {isError && (
               <div className="text-sm text-red-500">
-                Error: Exit code {exitCode}
+                {typeof exitCode === "number"
+                  ? `Error: Exit code ${exitCode}`
+                  : "Error"}
               </div>
             )}
             {hasOutput ? (
@@ -178,12 +189,23 @@ export function BashRenderer({
             </div>
           )}
 
+          {isDetached && (
+            <div>
+              <div className="mb-1 text-xs font-medium text-muted-foreground">
+                Mode
+              </div>
+              <span className="text-sm text-foreground">
+                Detached (background)
+              </span>
+            </div>
+          )}
+
           {/* Full output */}
           {part.state === "output-available" && (
             <div>
               <div className="mb-1 flex items-center gap-2 text-xs font-medium text-muted-foreground">
                 <span>Output</span>
-                {exitCode !== undefined && (
+                {typeof exitCode === "number" && (
                   <span
                     className={cn(
                       "rounded px-1.5 py-0.5",
