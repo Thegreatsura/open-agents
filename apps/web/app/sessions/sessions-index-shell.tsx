@@ -22,9 +22,11 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { useSessions, type SessionWithUnread } from "@/hooks/use-sessions";
+import type { Session as AuthSession } from "@/lib/session/types";
 
 type SessionsIndexShellProps = {
   lastRepo: { owner: string; repo: string } | null;
+  currentUser: AuthSession["user"];
   initialSessionsData?: {
     sessions: SessionWithUnread[];
   };
@@ -32,6 +34,7 @@ type SessionsIndexShellProps = {
 
 export function SessionsIndexShell({
   lastRepo,
+  currentUser,
   initialSessionsData,
 }: SessionsIndexShellProps) {
   const router = useRouter();
@@ -106,6 +109,7 @@ export function SessionsIndexShell({
             onArchiveSession={handleArchiveSession}
             createSession={createSession}
             lastRepo={lastRepo}
+            initialUser={currentUser}
           />
         </SidebarContent>
       </Sidebar>

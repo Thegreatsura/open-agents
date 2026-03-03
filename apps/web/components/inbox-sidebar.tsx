@@ -7,6 +7,7 @@ import {
   GitMerge,
   Pencil,
   Plus,
+  Settings,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -15,6 +16,7 @@ import {
   isRenameSaveDisabled,
 } from "@/components/inbox-sidebar-rename";
 import { NewSessionDialog } from "@/components/new-session-dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -32,7 +34,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { useSidebar } from "@/components/ui/sidebar";
+import { useSession } from "@/hooks/use-session";
 import type { SessionWithUnread } from "@/hooks/use-sessions";
+import type { Session as AuthSession } from "@/lib/session/types";
 
 type CreateSessionInput = {
   repoOwner?: string;
@@ -56,6 +60,7 @@ type InboxSidebarProps = {
     chat: { id: string };
   }>;
   lastRepo: { owner: string; repo: string } | null;
+  initialUser?: AuthSession["user"];
 };
 
 function formatRelativeTime(date: Date): string {
@@ -74,6 +79,15 @@ function formatRelativeTime(date: Date): string {
     month: "short",
     day: "numeric",
   });
+}
+
+function getAvatarFallback(username: string): string {
+  const normalized = username.trim();
+  if (!normalized) {
+    return "?";
+  }
+
+  return normalized.slice(0, 2).toUpperCase();
 }
 
 function DiffStats({
@@ -269,8 +283,10 @@ export function InboxSidebar({
   onArchiveSession,
   createSession,
   lastRepo,
+  initialUser,
 }: InboxSidebarProps) {
   const router = useRouter();
+  const { session } = useSession();
   const { isMobile, setOpenMobile } = useSidebar();
   const [showArchived, setShowArchived] = useState(false);
   const [newSessionOpen, setNewSessionOpen] = useState(false);
@@ -297,6 +313,7 @@ export function InboxSidebar({
   );
   const displayedSessions = showArchived ? archivedSessions : activeSessions;
   const showLoadingSkeleton = sessionsLoading && sessions.length === 0;
+  const sidebarUser = session?.user ?? initialUser;
 
   const handleSessionClick = useCallback(
     (session: SessionWithUnread) => {
@@ -458,6 +475,44 @@ export function InboxSidebar({
           </div>
         )}
       </div>
+
+      {sidebarUser ? (
+        <div className="border-t border-border p-3">
+          <div className="flex items-center gap-2 rounded-lg p-2">
+            <Avatar className="h-9 w-9 shrink-0">
+              {sidebarUser.avatar ? (
+                <AvatarImage
+                  src={sidebarUser.avatar}
+                  alt={sidebarUser.username}
+                />
+              ) : null}
+              <AvatarFallback>
+                {getAvatarFallback(sidebarUser.username)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold leading-none text-foreground">
+                {sidebarUser.username}
+              </p>
+              {sidebarUser.email ? (
+                <p className="mt-1 truncate text-xs text-muted-foreground">
+                  {sidebarUser.email}
+                </p>
+              ) : null}
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+              onClick={() => router.push("/settings")}
+              aria-label="Open settings"
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       <Dialog
         open={Boolean(renameDialogSession)}
