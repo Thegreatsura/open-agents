@@ -5,10 +5,11 @@ import {
   ChevronDown,
   ChevronRight,
   FileText,
+  GitCommitHorizontal,
   Loader2,
   RefreshCw,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { DiffFile } from "@/app/api/sessions/[sessionId]/diff/route";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +19,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   type DiffMode,
   useUserPreferences,
@@ -33,6 +41,7 @@ type DiffViewerProps = {
 };
 
 type DiffStyle = DiffMode;
+type DiffScope = "all" | "uncommitted";
 
 const wrappedDiffExtensions = new Set([".md", ".mdx", ".markdown", ".txt"]);
 
@@ -41,6 +50,10 @@ function shouldWrapDiffContent(filePath: string) {
   return [...wrappedDiffExtensions].some((extension) =>
     normalizedPath.endsWith(extension),
   );
+}
+
+function isUncommittedFile(file: DiffFile): boolean {
+  return file.stagingStatus === "unstaged" || file.stagingStatus === "partial";
 }
 
 function formatTimestamp(date: Date) {
@@ -207,6 +220,55 @@ function FileEntry({
   );
 }
 
+function ScopeDropdown({
+  scope,
+  onScopeChange,
+  uncommittedFileCount,
+}: {
+  scope: DiffScope;
+  onScopeChange: (scope: DiffScope) => void;
+  uncommittedFileCount: number;
+}) {
+  const label = scope === "all" ? "All changes" : "Uncommitted changes";
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 px-2 text-xs font-medium"
+        >
+          {scope === "uncommitted" && (
+            <GitCommitHorizontal className="h-3 w-3" />
+          )}
+          {label}
+          <ChevronDown className="h-3 w-3 opacity-50" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-[200px]">
+        <DropdownMenuRadioGroup
+          value={scope}
+          onValueChange={(v) => onScopeChange(v as DiffScope)}
+        >
+          <DropdownMenuRadioItem value="all">All changes</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="uncommitted">
+            <div className="flex flex-col">
+              <span>Uncommitted changes</span>
+              {uncommittedFileCount > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  {uncommittedFileCount} file
+                  {uncommittedFileCount !== 1 && "s"} changed
+                </span>
+              )}
+            </div>
+          </DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function DiffViewer({ open, onOpenChange }: DiffViewerProps) {
   const {
     diff,
@@ -221,6 +283,30 @@ export function DiffViewer({ open, onOpenChange }: DiffViewerProps) {
   const { preferences } = useUserPreferences();
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const [diffStyle, setDiffStyle] = useState<DiffStyle>("unified");
+  const [scope, setScope] = useState<DiffScope>("all");
+
+  // Filter files based on the selected scope
+  const filteredFiles = useMemo(() => {
+    if (!diff) return [];
+    if (scope === "all") return diff.files;
+    return diff.files.filter(isUncommittedFile);
+  }, [diff, scope]);
+
+  // Compute summary for the filtered view
+  const filteredSummary = useMemo(() => {
+    if (scope === "all" && diff) return diff.summary;
+    return {
+      totalFiles: filteredFiles.length,
+      totalAdditions: filteredFiles.reduce((sum, f) => sum + f.additions, 0),
+      totalDeletions: filteredFiles.reduce((sum, f) => sum + f.deletions, 0),
+    };
+  }, [scope, diff, filteredFiles]);
+
+  // Count uncommitted files for the dropdown subtitle
+  const uncommittedFileCount = useMemo(() => {
+    if (!diff) return 0;
+    return diff.files.filter(isUncommittedFile).length;
+  }, [diff]);
 
   // Show stale indicator if sandbox is offline (even if data came from a live fetch earlier)
   const showStaleIndicator = !sandboxInfo && diff !== null;
@@ -238,9 +324,7 @@ export function DiffViewer({ open, onOpenChange }: DiffViewerProps) {
   };
 
   const expandAll = () => {
-    if (diff) {
-      setExpandedFiles(new Set(diff.files.map((f) => f.path)));
-    }
+    setExpandedFiles(new Set(filteredFiles.map((f) => f.path)));
   };
 
   const collapseAll = () => {
@@ -260,11 +344,16 @@ export function DiffViewer({ open, onOpenChange }: DiffViewerProps) {
     setDiffStyle(preferences?.defaultDiffMode ?? "unified");
   }, [open, isMobile, preferences?.defaultDiffMode]);
 
+  // Reset expanded files when scope changes
+  useEffect(() => {
+    setExpandedFiles(new Set());
+  }, [scope]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton
-        className="flex h-[90vh] max-w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[calc(100vw-4rem)]"
+        className="flex h-[100dvh] w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none border-0 p-0 sm:h-[90vh] sm:max-w-[calc(100vw-4rem)] sm:rounded-lg sm:border"
       >
         <DialogHeader className="shrink-0 border-b border-border px-4 py-3">
           <div className="flex items-center justify-between pr-8">
@@ -272,13 +361,18 @@ export function DiffViewer({ open, onOpenChange }: DiffViewerProps) {
               <DialogTitle className="text-base font-medium">
                 Changes
               </DialogTitle>
-              {diff && diff.summary.totalFiles > 0 && (
+              <ScopeDropdown
+                scope={scope}
+                onScopeChange={setScope}
+                uncommittedFileCount={uncommittedFileCount}
+              />
+              {filteredSummary.totalFiles > 0 && (
                 <div className="flex items-center gap-2 text-xs">
                   <span className="text-green-600 dark:text-green-500">
-                    +{diff.summary.totalAdditions}
+                    +{filteredSummary.totalAdditions}
                   </span>
                   <span className="text-red-600 dark:text-red-400">
-                    -{diff.summary.totalDeletions}
+                    -{filteredSummary.totalDeletions}
                   </span>
                 </div>
               )}
@@ -323,13 +417,13 @@ export function DiffViewer({ open, onOpenChange }: DiffViewerProps) {
                   Split
                 </button>
               </div>
-              {diff && diff.files.length > 0 && (
+              {filteredFiles.length > 0 && (
                 <>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={expandAll}
-                    className="h-7 px-2 text-xs"
+                    className="hidden h-7 px-2 text-xs sm:inline-flex"
                   >
                     Expand all
                   </Button>
@@ -337,7 +431,7 @@ export function DiffViewer({ open, onOpenChange }: DiffViewerProps) {
                     variant="ghost"
                     size="sm"
                     onClick={collapseAll}
-                    className="h-7 px-2 text-xs"
+                    className="hidden h-7 px-2 text-xs sm:inline-flex"
                   >
                     Collapse
                   </Button>
@@ -374,17 +468,19 @@ export function DiffViewer({ open, onOpenChange }: DiffViewerProps) {
             </div>
           )}
 
-          {!diffLoading && !diffError && diff && diff.files.length === 0 && (
+          {!diffLoading && !diffError && diff && filteredFiles.length === 0 && (
             <div className="px-4 py-8 text-center">
               <p className="text-sm text-muted-foreground">
-                No changes detected
+                {scope === "uncommitted"
+                  ? "No uncommitted changes"
+                  : "No changes detected"}
               </p>
             </div>
           )}
 
-          {!diffLoading && !diffError && diff && diff.files.length > 0 && (
+          {!diffLoading && !diffError && filteredFiles.length > 0 && (
             <div>
-              {diff.files.map((file) => (
+              {filteredFiles.map((file) => (
                 <FileEntry
                   key={file.path}
                   file={file}
@@ -398,13 +494,13 @@ export function DiffViewer({ open, onOpenChange }: DiffViewerProps) {
         </div>
 
         {/* Footer with file count and base ref */}
-        {diff && diff.files.length > 0 && (
+        {filteredFiles.length > 0 && (
           <div className="flex shrink-0 items-center justify-between border-t border-border px-4 py-2 text-xs text-muted-foreground">
             <span>
-              {diff.summary.totalFiles} file
-              {diff.summary.totalFiles !== 1 && "s"} changed
+              {filteredSummary.totalFiles} file
+              {filteredSummary.totalFiles !== 1 && "s"} changed
             </span>
-            {diff.baseRef && (
+            {diff?.baseRef && (
               <span>
                 vs{" "}
                 <span className="font-mono text-foreground/70">
