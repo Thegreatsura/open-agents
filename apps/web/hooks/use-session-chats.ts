@@ -546,18 +546,21 @@ export function useSessionChats(
 
       const createdChat = responseData.chat;
 
+      // Replace the optimistic entry in-place with the server version
       await mutate(
         (current) =>
-          toChatsResponse(current, [
-            {
-              ...createdChat,
-              hasUnread: false,
-              isStreaming: false,
-            },
-            ...(current?.chats ?? []).filter(
-              (chat) => chat.id !== createdChat.id,
+          toChatsResponse(
+            current,
+            (current?.chats ?? []).map((chat) =>
+              chat.id === createdChat.id
+                ? {
+                    ...createdChat,
+                    hasUnread: false,
+                    isStreaming: false,
+                  }
+                : chat,
             ),
-          ]),
+          ),
         { revalidate: false },
       );
 
